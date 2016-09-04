@@ -1,8 +1,3 @@
-#Richard Shanahan  
-#https://github.com/rjshanahan  
-#6 August 2016
-
-
 # load required packages
 library(dplyr)
 library(Hmisc)
@@ -20,15 +15,20 @@ library(igraph)
 library(ggnet)
 library(intergraph)
 
+
+
 #seet ggplot2 theme
 theme = theme_set(theme_minimal())
 theme = theme_update(legend.position="top")
 
+#Richard Shanahan  
+#https://github.com/rjshanahan  
+#6 August 2016
 
-###### BAYESIAN NETWORK for a Breast Cancer Genes dataset
+###### INFS 5094: Project Breast Cancer Genes
 
 ###### 0.1 READ & PRE-PROCESS BRCA-50 DATASET ###### 
-breast_cancer <- read.csv('YOUR_CSV.csv',
+breast_cancer <- read.csv('BRCA_RNASeqv2_top50.csv',
                           header=T,
                           sep=",",
                           quote='"',
@@ -67,8 +67,10 @@ str(breast_cancer)
 #function to discretise based on average value of gene
 binariser <- function(myCol) {
   
-  myMean <- mean(myCol,
-                 na.rm=T)
+  # myMean <- mean(myCol,
+  #                na.rm=T)
+  
+  myMean <- sum(colSums(breast_cancer[1:50]))/(nrow(breast_cancer)*ncol(breast_cancer[1:50]))
   
   myCol <- ifelse(myCol > myMean,
                   1,
@@ -80,6 +82,7 @@ binariser <- function(myCol) {
 breast_cancer_dc <- breast_cancer %>%
   mutate_each(funs(binariser),
               -class, -class_char, -id)
+
 
 
 #binarise class variable
@@ -177,7 +180,7 @@ pairs(select(breast_cancer, -class, -class_char),
 
 
 
-##### PART 1.1 - BUILD NETWORK #####
+##### PART 1.1 - BUILD NETWORK - LEARN GLOBAL STRUCTURE WITH PC ALGORITHM #####
 
 #list of sufficient statistics for conditional independence tests
 suffStat <- list(C = breast_cancer.cor, 
@@ -194,48 +197,54 @@ pc.fit <- pc(suffStat,
              alpha = 0.01)
 
 #plot network
-plot(pc.fit@graph,
-     cex.lab=0.5)
+#plot(pc.fit@graph,
+#     cex.lab=0.5)
 
-dev.off()
+#dev.off()
 
-##### PART 1.2 - CAUSAL STRUCTURE AROUND EBF1 #####
-
-
-#learn causal strucure around gene EBF1
-pcS <- pcSelect(select(breast_cancer, EBF1), 
-                select(breast_cancer, -class, -class_char, -id, -EBF1),
-                alpha=0.05)
-pcS
-
-#construct data frame to be ordered
-pcS.df <-data.frame(gene=colnames(select(breast_cancer, -class, -class_char, -id, -EBF1)),
-                    pcS$G, 
-                    pcS$zMin)
-
-#order data frame and find top 5 causal genes for EBF1
-EBF1_top5 <- pcS.df %>% 
-  arrange(desc(pcS.zMin)) %>% 
-  head(n=5)
-
-EBF1_top5
-
+##### PART 1.2 - CAUSAL INFERENCE/EFFECT OF NODES ON EBF1 #####
 
 #causal inference Top 5 using IDA 
-ida_EBF1 <- idaFast(40, 
-                    seq(1,50,1)[-40], 
-                    cov(select(breast_cancer, -class, -class_char, -id)), 
-                    pc.fit@graph)
 
-ida_EBF1 <- data.frame(ida_EBF1)
+#empty dataframe
+ida_EBF1 <- data.frame()
 
-ida_EBF1$genes <- colnames(select(breast_cancer, -class, -class_char, -id, -EBF1))
+#loop through 50 genes and calculate the causal effect using IDA on each gene (inc. EBF1)
+for (i in 1:50)
+{
+  
+  newIDA <- idaFast(
+          i, 
+          40, 
+          cov(select(breast_cancer, -class, -class_char, -id)), 
+          pc.fit@graph)
+  
+  if(length(newIDA > 1))
+  {
+    #if there are multiple causal effects the average is is used
+    newIDA.df <- data.frame(mean(newIDA))
+  }
+  else
+  {
+    newIDA.df <- data.frame(newIDA)
+  }
+  
+  newIDA.df <- cbind(newIDA.df, i)
+  
+  ida_EBF1 <- rbind(ida_EBF1, newIDA.df)
+  
+}
 
+#add gene name to the loop created dataframe
+ida_EBF1$genes <- colnames(select(breast_cancer, -class, -class_char, -id))
+
+#top 5 genes
 EBF1_ida_top5 <- ida_EBF1 %>% 
-  arrange(desc(ida_EBF1)) %>% 
-  head(n=10)
+  arrange(desc(mean.newIDA.)) %>% 
+  head(n=5)
 
 EBF1_ida_top5
+
 
 
 ##### PART 1.3 - VISUALISE NETWORK - EBF1 TOP 5 CAUSAL #####
@@ -258,18 +267,18 @@ myNet <- asNetwork(myNet)
 myGene = network.vertex.names(myNet)
 myGene = ifelse(myGene %in% "EBF1" , 
                 "EBF1",
-                ifelse(myGene %in% c("ABCA9","KCNIP2","ANGPTL1","ARHGAP20","NPR1"),
+                ifelse(myGene %in% c("ABCA10","HIF3A","ARHGAP20","TMEM220","CD300LG"),
                        "Top 5 Causal",
                        "Other Gene"))
 myNet %v% "EBF1" = myGene
 
 
 p <- ggnet2(myNet, 
-            #size = 15, 
+            size = 15, 
             alpha = 0.8,
-            size = "degree",
-            size.legend = "Number of Degrees",
-            size.cut = 3,
+            #size = "degree",
+            #size.legend = "Number of Degrees",
+            #size.cut = 3,
             label = TRUE, 
             label.size = 3,
             color = "EBF1", 
@@ -280,7 +289,7 @@ p <- ggnet2(myNet,
             arrow.gap = 0.025,
             edge.color = 'gray50'
 ) +
-  ggtitle('Bayesian Network for BRCA-50 Breast Cancer Genes') +
+  ggtitle('Bayesian Network for BRCA-50 Breast Cancer Genes inc. EBF1 Top 5 Causal') +
   guides(color = FALSE, size = FALSE) 
 #  ggsave(paste0('Bayesian Network for BRCA-50 Breast Cancer Genes','.png'))
 
@@ -289,6 +298,7 @@ p <- ggnet2(myNet,
 
 #static
 print(p)
+
 
 
 
@@ -361,14 +371,14 @@ pc.fit_class <- pc(suffStat_dc,
 ##### PART 3.2 - IDENTIFY CLASS PARENT/CHILD SET WITH LOCAL STRUCTURE LEARNING#####
 
 
-#learn causal strucure around gene EBF1
+#learn causal strucure around gene EBF1 - using pcSimple
 pcS_class <- pcSelect(y=select(breast_cancer_dc, class_bin), 
                       dm=select(breast_cancer_dc, -class, -class_char, -id),
                       alpha=0.05)
 pcS_class
 
 
-#find parent/child set using local structure learning algorithm
+#find parent/child set using local structure learning algorithm - using SI-HITON
 BRCA_class_set <- learn.nbr(select(breast_cancer_dc, -class, -class_char, -id), 
                             'class_bin', 
                             method='si.hiton.pc',
@@ -397,10 +407,13 @@ myNet_class <- asNetwork(myNet_class)
 myClass = network.vertex.names(myNet_class)
 myClass = ifelse(myClass %in% "class_bin" , 
                  "class",
-                 ifelse(myClass %in% c("MYOM1","FIGF","SCARA5","CA4","LYVE1","ATP1A2","HIF3A","C2orf40"),
-                        "parent/child",
+                 #ifelse(myClass %in% c("MYOM1","FIGF","SCARA5","CA4","LYVE1","ATP1A2","HIF3A","C2orf40"),
+                 #ifelse(myClass %in% c("GPAM", "LEP", "ATP1A2"),
+                 ifelse(myClass %in% c("FIGF", "CD300LG", "ARHGAP20", "KLHL29", "SCARA5", "MAMDC2", "CXCL2", "ATP1A2", "TMEM220"),
+                                         "parent/child",
                         "other"))
 myNet_class %v% "class" = myClass
+
 
 
 p2 <- ggnet2(myNet_class, 
@@ -496,8 +509,12 @@ table(prediction=myPredict,
 
 #train naiveBayes model using e1071 package
 nb_set <- naiveBayes(as.factor(class_bin)~.,
-                     data=select(breast_cancer_dc, class_bin, MYOM1,FIGF,SCARA5,CA4,LYVE1,ATP1A2,HIF3A,C2orf40),
+#                     data=select(breast_cancer_dc, class_bin, MYOM1,FIGF,SCARA5,CA4,LYVE1,ATP1A2,HIF3A,C2orf40),
+#                     data=select(breast_cancer_dc, class_bin, GPAM,LEP,ATP1A2),  
+                     data=select(breast_cancer_dc, class_bin, FIGF, CD300LG, ARHGAP20, KLHL29, SCARA5, MAMDC2, CXCL2, ATP1A2, TMEM220),   
                      laplace = 0)
+
+
 
 #view model summary
 nb_set
@@ -506,7 +523,8 @@ summary(nb_set)
 
 #prediction object
 myPredict <- myPredictor(nb_set,
-                         select(breast_cancer_dc, class_bin, MYOM1,FIGF,SCARA5,CA4,LYVE1,ATP1A2,HIF3A,C2orf40))
+                         #select(breast_cancer_dc, class_bin, MYOM1,FIGF,SCARA5,CA4,LYVE1,ATP1A2,HIF3A,C2orf40))
+                         select(breast_cancer_dc, class_bin, FIGF, CD300LG, ARHGAP20, KLHL29, SCARA5, MAMDC2, CXCL2, ATP1A2, TMEM220))
 
 
 #confusion matrix
@@ -520,7 +538,8 @@ mean(myPredict == breast_cancer_dc$class_bin)
 #10 fold cross-validation
 breast_cancer_set_xval <- tune(naiveBayes,
                                as.factor(class_bin)~.,
-                               data = select(breast_cancer_dc, class_bin, MYOM1,FIGF,SCARA5,CA4,LYVE1,ATP1A2,HIF3A,C2orf40),
+#                              data=select(breast_cancer_dc, class_bin, MYOM1,FIGF,SCARA5,CA4,LYVE1,ATP1A2,HIF3A,C2orf40),
+                               data=select(breast_cancer_dc, class_bin, FIGF, CD300LG, ARHGAP20, KLHL29, SCARA5, MAMDC2, CXCL2, ATP1A2, TMEM220),          
                                predict.func = myPredictor
 )
 
