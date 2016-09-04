@@ -1,3 +1,9 @@
+#Richard Shanahan  
+#https://github.com/rjshanahan  
+#6 August 2016
+
+###### INFS 5094: Project Breast Cancer Genes
+
 # load required packages
 library(dplyr)
 library(Hmisc)
@@ -21,14 +27,8 @@ library(intergraph)
 theme = theme_set(theme_minimal())
 theme = theme_update(legend.position="top")
 
-#Richard Shanahan  
-#https://github.com/rjshanahan  
-#6 August 2016
-
-###### INFS 5094: Project Breast Cancer Genes
-
 ###### 0.1 READ & PRE-PROCESS BRCA-50 DATASET ###### 
-breast_cancer <- read.csv('BRCA_RNASeqv2_top50.csv',
+breast_cancer <- read.csv('YOUR_CSV.csv',
                           header=T,
                           sep=",",
                           quote='"',
