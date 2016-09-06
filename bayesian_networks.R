@@ -562,7 +562,6 @@ myPredict <- myPredictor(nb_set_xv,
 table(prediction=myPredict,
       true=breast_cancer_dc$class_bin)
 
-
 ##### PART 4.0 - MANUALLY CONSTRUCT CONDITIONAL PROBABILITY TABLES & QUERY #####
 
 #likelohood for each node - conditional probabilities
@@ -581,18 +580,25 @@ round(prop.table(table(breast_cancer_dc_sel$CD300LG, breast_cancer_dc_sel$BTNL9)
 round(prop.table(table(breast_cancer_dc_sel$ABCA9, breast_cancer_dc_sel$BTNL9)), 4)*100
 round(prop.table(table(breast_cancer_dc_sel$ABCA9, breast_cancer_dc_sel$IGSF10)), 4)*100
 round(prop.table(table(breast_cancer_dc_sel$IGSF10, breast_cancer_dc_sel$class_bin)), 4)*100
-round(prop.table(table(breast_cancer_dc_sel$class_bin, breast_cancer_dc_sel$CD300LG)), 4)*100
+round(prop.table(table(breast_cancer_dc_sel$ABCA9, breast_cancer_dc_sel$IGSF10)), 4)*100
 
+
+breast_cancer_dc_sel <- breast_cancer_dc %>% 
+  select(class_bin, BTNL9, CD300LG, IGSF10, ABCA9) 
+# %>% lapply(factor)
 
 #build conditional probability tables
-yn <- c(1,0)
+yn <- c("1","0")
 
+#build conditional probability tables based using values from data, eg:
+#P(ABCA9=1 | BTNL9=1) and 1 - P(ABCA9=1 | BTNL9=1) 
+#P(ABCA9=1 | BTNL9=0) and 1 - P(ABCA9=1 | BTNL9=0) 
 BTNL9 <- cptable(~BTNL9, values=c(18,82),levels=yn)
-ABCA9.BTNL9 <- cptable(~ABCA9|BTNL9, values=c(14,86,18,82),levels=yn)
-CD300LG.BTNL9 <- cptable(~CD300LG|BTNL9, values=c(12,88,18,82),levels=yn)
-class_bin.CD300LG <- cptable(~class_bin|CD300LG, values=c(91,9,12,88),levels=yn)
-IGSF10.class_bin <- cptable(~IGSF10|class_bin, values=c(14,86,91,9),levels=yn)
-ABCA9.IGSF10 <- cptable(~ABCA9|IGSF10, values=c(14,86,14,86),levels=yn)
+ABCA9.BTNL9 <- cptable(~ABCA9|BTNL9, values=c(12,88,2,98),levels=yn)
+CD300LG.BTNL9 <- cptable(~CD300LG|BTNL9, values=c(12,88,1,99),levels=yn)
+class_bin.CD300LG <- cptable(~class_bin|CD300LG, values=c(3,97,87,13),levels=yn)
+IGSF10.class_bin <- cptable(~IGSF10|class_bin, values=c(6,94,8,92),levels=yn)
+ABCA9.IGSF10 <- cptable(~ABCA9|IGSF10, values=c(1,9,4,96),levels=yn)
 
 #compile conditional tables
 CPTlist <- compileCPT(list(BTNL9,
@@ -609,12 +615,15 @@ plot(BRCA_net)
 
 
 #Estimate the probability of having cancer when the expression level of CD300LG is low and the expression level of BTNL9 is high. 
-querygrain(BRCA_net, nodes=c("class_bin", "CD300LG", "BTNL9"), type="conditional") 
+querygrain(BRCA_net, 
+           nodes=c("class_bin", "CD300LG", "BTNL9"), 
+           type="conditional") 
 
 
 #Estimate the probability of the four genes in the network having high expression levels
-querygrain(BRCA_net, nodes=c("CD300LG", "BTNL9", "IGSF10", "ABCA9"), type="joint") 
-
+querygrain(BRCA_net, 
+           nodes=c("CD300LG", "BTNL9", "IGSF10", "ABCA9"), 
+           type="joint") 
 
 
 
